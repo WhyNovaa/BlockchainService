@@ -62,6 +62,7 @@ impl Server {
         let balances_clone1 = Arc::clone(&self.balances);
         let balances_clone2 = Arc::clone(&self.balances);
         let addr = addr.to_string();
+
         tokio::spawn(async move {
             let app = Router::new()
                 .route("/api/balances/:address", post(add_address))

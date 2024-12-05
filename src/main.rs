@@ -57,19 +57,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
 
-    let client = Arc::new(OnlineClient::<PolkadotConfig>::from_url("ws://127.0.0.1:9944").await?);
+    let client = Arc::new(
+        OnlineClient::<PolkadotConfig>::from_url("ws://127.0.0.1:9944")
+            .await?
+    );
 
     let mut blocks = client.blocks().subscribe_finalized().await?;
 
-    while let block = blocks.next().await.unwrap().unwrap() {
+    while let Some(block_res) = blocks.next().await {
+        match block_res {
+            Ok(block) => {
+                let client = Arc::clone(&client);
+                let blocks_pool = Arc::clone(&blocks_pool);
+                let balances = Arc::clone(&balances);
 
-        let client = Arc::clone(&client);
-        let blocks_pool = Arc::clone(&blocks_pool);
-        let balances = Arc::clone(&balances);
-
-        tokio::spawn(async move {
-            handle_block(client, blocks_pool, balances, block).await
-        }).await?;
+                tokio::spawn(async move {
+                    handle_block(client, blocks_pool, balances, block).await
+                }).await?;
+            }
+            Err(e) => {
+                eprintln!("Error processing block: {}", e);
+                continue;
+            }
+        }
     }
 
     Ok(())
