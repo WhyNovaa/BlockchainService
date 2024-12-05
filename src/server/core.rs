@@ -42,7 +42,6 @@ async fn add_address(
     Extension((pool, balances)): Extension<(Arc<SqlitePool>, Arc<RwLock<HashMap<String, HashMap<u32, u64>>>>)>,
     Path(address): Path<String>,
 ) -> impl IntoResponse {
-    println!("{}", address);
     match insert_address_if_not_exist(pool, address.clone()).await {
         Ok(res) => {
             if res {
