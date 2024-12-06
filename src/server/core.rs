@@ -1,10 +1,12 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use serde_json::json;
 use sqlx::SqlitePool;
 use tokio::sync::RwLock;
 use axum::{extract::Path, response::{IntoResponse, Json as AxumJson}, routing::post, Extension, Router};
 use axum::routing::get;
+use subxt::utils::AccountId32;
 use tokio::net::TcpListener;
 use crate::database::db_tools::insert_address_if_not_exist;
 
@@ -42,6 +44,12 @@ async fn add_address(
     Extension((pool, balances)): Extension<(Arc<SqlitePool>, Arc<RwLock<HashMap<String, HashMap<u32, u64>>>>)>,
     Path(address): Path<String>,
 ) -> impl IntoResponse {
+    match AccountId32::from_str(address.as_str()) {
+        Ok(_) => {},
+        Err(_) => {
+            return AxumJson(json!({ "status": "400", "message": "Wrong address." }))
+        }
+    }
     match insert_address_if_not_exist(pool, address.clone()).await {
         Ok(res) => {
             if res {
