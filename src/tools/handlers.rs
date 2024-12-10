@@ -1,32 +1,47 @@
-use tokio::sync::RwLock;
-
-use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::Arc;
-
-use sqlx::SqlitePool;
 
 use subxt::{OnlineClient, PolkadotConfig};
 use subxt::blocks::Block;
 use subxt::utils::AccountId32;
 
-use crate::database::db_tools::insert_hash;
+use crate::modules::balances::Balances;
+use crate::modules::client::Client;
+use crate::modules::database::blocks_pool::BlocksPool;
+use crate::tools::db_tools::insert_hash;
 use crate::runtime;
 
-pub async fn handle_block(client: Arc<OnlineClient<PolkadotConfig>>,
-                          blocks_pool: Arc<SqlitePool>,
-                          balances: Arc<RwLock<HashMap<String, HashMap<u32, u64>>>>,
+pub async fn handle_block(client: Client,
+                          blocks_pool: BlocksPool,
+                          balances: Balances,
                           block: Block<PolkadotConfig, OnlineClient<PolkadotConfig>>) {
 
-    match insert_hash(blocks_pool, &block.header().number, block.hash().to_string().as_str()).await {
+    handle_hash(
+        blocks_pool.pool(),
+        &block.header().number,
+        block.hash().to_string().as_str()
+    ).await;
+
+    handle_accounts_in_hash(
+        client,
+        balances,
+        block
+    ).await;
+}
+
+pub async fn handle_hash(blocks_pool: BlocksPool, block_number: &u32, hash: &str) {
+    match insert_hash(blocks_pool, block_number, hash).await {
         Ok(res) => {
-            if res { println!("#{} hash:{} was added", block.header().number, block.hash()) }
-            else { println!("{} wasn't added", block.hash()) }
+            if res { println!("#{} hash:{} was added", block_number, hash) }
+            else { println!("{} wasn't added", hash) }
         },
         Err(e) => eprintln!("Error: {e}")
     }
+}
 
-    let rw_guard = balances.read().await;
+pub async fn handle_accounts_in_hash(client: Client,
+                                     balances: Balances,
+                                     block: Block<PolkadotConfig, OnlineClient<PolkadotConfig>>) {
+    let rw_guard = balances.0.read().await;
     let tracking_addresses: Vec<String> = rw_guard.keys().cloned().collect();
     drop(rw_guard);
 
@@ -45,7 +60,7 @@ pub async fn handle_block(client: Arc<OnlineClient<PolkadotConfig>>,
         match client.storage().at(block.hash()).fetch(&storage_query).await {
             Ok(maybe_account) => {
                 if let Some(account) = maybe_account {
-                    let mut rw_guard = balances.write().await;
+                    let mut rw_guard = balances.0.write().await;
                     let block_num_to_balance = rw_guard.get_mut(&tracking_address).unwrap();
                     block_num_to_balance.insert(block.header().number, account.data.free);
                 }

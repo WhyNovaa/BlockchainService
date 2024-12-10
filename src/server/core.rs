@@ -1,47 +1,62 @@
+use crate::exit;
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::Arc;
 use serde_json::json;
-use sqlx::SqlitePool;
-use tokio::sync::RwLock;
 use axum::{extract::Path, response::{IntoResponse, Json as AxumJson}, routing::post, Extension, Router};
 use axum::routing::get;
 use subxt::utils::AccountId32;
 use tokio::net::TcpListener;
-use crate::database::db_tools::insert_address_if_not_exist;
+
+use crate::modules::balances::Balances;
+use crate::modules::client::URL;
+use crate::modules::database::addresses_pool::AddressesPool;
+use crate::tools::db_tools::insert_address_if_not_exist;
 
 pub struct Server {
-    addr_pool: Arc<SqlitePool>,
-    balances: Arc<RwLock<HashMap<String, HashMap<u32, u64>>>>,
+    addr_pool: AddressesPool,
+    balances: Balances,
 }
 
 impl Server {
-    pub fn new(addr_pool: Arc<SqlitePool>, balances: Arc<RwLock<HashMap<String, HashMap<u32, u64>>>>) -> Self {
+    pub fn new(addr_pool: AddressesPool, balances: Balances) -> Self {
         Server { addr_pool, balances }
     }
 
-    pub fn start(&self, addr: &str) {
-        let addr_pool_clone1 = Arc::clone(&self.addr_pool);
-        let balances_clone1 = Arc::clone(&self.balances);
-        let balances_clone2 = Arc::clone(&self.balances);
-        let addr = addr.to_string();
+    pub fn start(self, url: URL) {
 
         tokio::spawn(async move {
             let app = Router::new()
                 .route("/api/balances/:address", post(add_address))
-                .layer(Extension((addr_pool_clone1, balances_clone1)))
+                .layer(Extension(
+                    (self.addr_pool.pool(), self.balances.balances())
+                ))
                 .route("/api/balances/:address/:block_no", get(get_balance))
-                .layer(Extension(balances_clone2));
+                .layer(
+                    Extension(self.balances.balances())
+                );
 
-            let listener = TcpListener::bind(addr).await.unwrap();
-            axum::serve(listener, app).await.unwrap();
+            let listener = match TcpListener::bind(url.to_string()).await {
+                Ok(listener) => listener,
+                Err(e) => {
+                    eprintln!("Listener initialization error: {e}");
+                    exit(1);
+                }
+            };
+
+            match axum::serve(listener, app).await {
+                Ok(()) => {},
+                Err(e) => {
+                    eprintln!("Service start error: {e}");
+                    exit(1);
+                }
+            };
         });
     }
 }
 
 
 async fn add_address(
-    Extension((pool, balances)): Extension<(Arc<SqlitePool>, Arc<RwLock<HashMap<String, HashMap<u32, u64>>>>)>,
+    Extension((pool, balances)): Extension<(AddressesPool, Balances)>,
     Path(address): Path<String>,
 ) -> impl IntoResponse {
     match AccountId32::from_str(address.as_str()) {
@@ -53,7 +68,7 @@ async fn add_address(
     match insert_address_if_not_exist(pool, address.clone()).await {
         Ok(res) => {
             if res {
-                let mut rw_guard = balances.write().await;
+                let mut rw_guard = balances.0.write().await;
                 rw_guard.insert(address, HashMap::new());
                 AxumJson(json!({ "status": "201", "message": "Address added." }))
             } else {
@@ -65,11 +80,11 @@ async fn add_address(
 }
 
 async fn get_balance(
-    Extension(balances): Extension<Arc<RwLock<HashMap<String, HashMap<u32, u64>>>>>,
+    Extension(balances): Extension<Balances>,
     Path((address, block_no)): Path<(String, u32)>,
 ) -> impl IntoResponse {
 
-    let rw_guard = balances.read().await;
+    let rw_guard = balances.0.read().await;
     let maybe_block_num_to_balance = rw_guard.get(&address).cloned();
     drop(rw_guard);
 
