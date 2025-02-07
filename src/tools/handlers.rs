@@ -1,46 +1,49 @@
 use std::str::FromStr;
 
-use subxt::{OnlineClient, PolkadotConfig};
 use subxt::blocks::Block;
 use subxt::utils::AccountId32;
+use subxt::{OnlineClient, PolkadotConfig};
 
-use crate::modules::balances::Balances;
-use crate::modules::client::Client;
-use crate::modules::database::blocks_pool::BlocksPool;
-use crate::tools::db_tools::insert_hash;
+use crate::models::balances::Balances;
+use crate::models::client::Client;
+use crate::models::database::blocks_pool::BlocksPool;
 use crate::runtime;
+use crate::tools::db_tools::insert_hash;
 
-pub async fn handle_block(client: Client,
-                          blocks_pool: BlocksPool,
-                          balances: Balances,
-                          block: Block<PolkadotConfig, OnlineClient<PolkadotConfig>>) {
-
+pub async fn handle_block(
+    client: Client,
+    blocks_pool: BlocksPool,
+    balances: Balances,
+    block: Block<PolkadotConfig, OnlineClient<PolkadotConfig>>,
+) {
     handle_hash(
         blocks_pool.pool(),
         &block.header().number,
-        block.hash().to_string().as_str()
-    ).await;
+        block.hash().to_string().as_str(),
+    )
+    .await;
 
-    handle_accounts_in_hash(
-        client,
-        balances,
-        block
-    ).await;
+    handle_accounts_in_hash(client, balances, block).await;
 }
 
 pub async fn handle_hash(blocks_pool: BlocksPool, block_number: &u32, hash: &str) {
     match insert_hash(blocks_pool, block_number, hash).await {
         Ok(res) => {
-            if res { println!("#{} hash:{} was added", block_number, hash) }
-            else { println!("{} wasn't added", hash) }
-        },
-        Err(e) => eprintln!("Error: {e}")
+            if res {
+                println!("#{} hash:{} was added", block_number, hash)
+            } else {
+                println!("{} wasn't added", hash)
+            }
+        }
+        Err(e) => eprintln!("Error: {e}"),
     }
 }
 
-pub async fn handle_accounts_in_hash(client: Client,
-                                     balances: Balances,
-                                     block: Block<PolkadotConfig, OnlineClient<PolkadotConfig>>) {
+pub async fn handle_accounts_in_hash(
+    client: Client,
+    balances: Balances,
+    block: Block<PolkadotConfig, OnlineClient<PolkadotConfig>>,
+) {
     let rw_guard = balances.0.read().await;
     let tracking_addresses: Vec<String> = rw_guard.keys().cloned().collect();
     drop(rw_guard);
@@ -57,14 +60,18 @@ pub async fn handle_accounts_in_hash(client: Client,
         }
 
         let storage_query = runtime::storage().system().account(&account_id);
-        match client.storage().at(block.hash()).fetch(&storage_query).await {
+        match client
+            .storage()
+            .at(block.hash())
+            .fetch(&storage_query)
+            .await
+        {
             Ok(maybe_account) => {
                 if let Some(account) = maybe_account {
                     let mut rw_guard = balances.0.write().await;
                     let block_num_to_balance = rw_guard.get_mut(&tracking_address).unwrap();
                     block_num_to_balance.insert(block.header().number, account.data.free);
-                }
-                else {
+                } else {
                     println!("No data for {}", account_id);
                     continue;
                 }

@@ -1,23 +1,19 @@
+mod models;
 mod server;
-mod modules;
 mod tools;
 
+use models::database::database_pools::DatabasePools;
 use std::process::exit;
-use modules::database::database_pools::DatabasePools;
 
-use crate::modules::balances::Balances;
-use crate::modules::client::{Client, URL};
+use crate::models::balances::Balances;
+use crate::models::client::{Client, URL};
 use crate::server::core::Server;
-
 
 #[subxt::subxt(runtime_metadata_path = "metadata.scale")]
 pub mod runtime {}
 
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-
-
     let pools = match DatabasePools::initialize().await {
         Ok(res) => res,
         Err(e) => {
@@ -25,7 +21,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             exit(1);
         }
     };
-
 
     let balances = match Balances::initialize(&pools).await {
         Ok(balances) => balances,
@@ -35,7 +30,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-
     let client = match Client::initialize(URL("ws://127.0.0.1:9944")).await {
         Ok(cl) => cl,
         Err(e) => {
@@ -44,13 +38,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    let _ = Server::new(pools.addresses_pool(), balances.balances()).start(URL("localhost:8080"));
 
-    let _ = Server::new(pools.addresses_pool(), balances.balances())
-        .start(URL("localhost:8080"));
-
-
-    client.start_subscription(pools.blocks_pool(), balances.balances()).await?;
-
+    client
+        .start_subscription(pools.blocks_pool(), balances.balances())
+        .await?;
 
     Ok(())
 }

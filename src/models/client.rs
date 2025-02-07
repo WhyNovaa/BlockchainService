@@ -1,11 +1,11 @@
+use crate::models::balances::Balances;
+use crate::models::database::blocks_pool::BlocksPool;
+use crate::tools::handlers::handle_block;
 use std::process::exit;
 use std::sync::Arc;
-use subxt::{OnlineClient, PolkadotConfig};
 use subxt::blocks::BlocksClient;
 use subxt::storage::StorageClient;
-use crate::tools::handlers::handle_block;
-use crate::modules::balances::Balances;
-use crate::modules::database::blocks_pool::BlocksPool;
+use subxt::{OnlineClient, PolkadotConfig};
 
 pub struct URL(pub &'static str);
 impl URL {
@@ -14,33 +14,27 @@ impl URL {
     }
 }
 
-
 pub struct Client(Arc<OnlineClient<PolkadotConfig>>);
 
 impl Client {
     pub async fn initialize(url: URL) -> Result<Self, Box<dyn std::error::Error>> {
-        let client = Arc::new(
-            OnlineClient::<PolkadotConfig>::from_url(url.0)
-            .await?
-        );
+        let client = Arc::new(OnlineClient::<PolkadotConfig>::from_url(url.0).await?);
 
-        Ok(Self(
-            client
-        ))
+        Ok(Self(client))
     }
 
     pub fn storage(&self) -> StorageClient<PolkadotConfig, OnlineClient<PolkadotConfig>> {
         self.0.storage()
     }
-    pub fn blocks(&self) -> BlocksClient<PolkadotConfig, OnlineClient<PolkadotConfig>>
-    {
+    pub fn blocks(&self) -> BlocksClient<PolkadotConfig, OnlineClient<PolkadotConfig>> {
         self.0.blocks()
     }
 
-    pub async fn start_subscription(&self,
-                                    blocks_pool: BlocksPool,
-                                    balances: Balances) -> Result<(), Box<dyn std::error::Error>>{
-
+    pub async fn start_subscription(
+        &self,
+        blocks_pool: BlocksPool,
+        balances: Balances,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut blocks = match self.blocks().subscribe_finalized().await {
             Ok(block_stream) => block_stream,
             Err(e) => {
@@ -58,7 +52,8 @@ impl Client {
 
                     tokio::spawn(async move {
                         handle_block(client, blocks_pool, balances, block).await
-                    }).await?;
+                    })
+                    .await?;
                 }
                 Err(e) => {
                     eprintln!("Error processing block: {}", e);
@@ -71,8 +66,6 @@ impl Client {
     }
 
     pub fn client(&self) -> Self {
-        Self(
-            Arc::clone(&self.0)
-        )
+        Self(Arc::clone(&self.0))
     }
 }

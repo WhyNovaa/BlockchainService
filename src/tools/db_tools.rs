@@ -1,9 +1,9 @@
+use crate::models::database::{addresses_pool::AddressesPool, blocks_pool::BlocksPool};
+use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
-use sqlx::Row;
 use tokio::fs::{metadata, File};
 use tokio::sync::RwLock;
-use crate::modules::database::{addresses_pool::AddressesPool, blocks_pool::BlocksPool};
 pub const BLOCKS_HISTORY_NAME: &str = "BlocksHist";
 pub const ADDRESSES_NAME: &str = "Addresses";
 
@@ -33,8 +33,15 @@ async fn create_path_if_necessary(name: &str) {
     }
 }
 
-pub async fn insert_hash(blocks_pool: BlocksPool, number: &u32, hash: &str) -> Result<bool, sqlx::Error> {
-    let req = format!("INSERT INTO {}(number, hash) VALUES(?, ?)", BLOCKS_HISTORY_NAME);
+pub async fn insert_hash(
+    blocks_pool: BlocksPool,
+    number: &u32,
+    hash: &str,
+) -> Result<bool, sqlx::Error> {
+    let req = format!(
+        "INSERT INTO {}(number, hash) VALUES(?, ?)",
+        BLOCKS_HISTORY_NAME
+    );
     let res = sqlx::query(req.as_str())
         .bind(number)
         .bind(hash)
@@ -44,7 +51,10 @@ pub async fn insert_hash(blocks_pool: BlocksPool, number: &u32, hash: &str) -> R
     Ok(res.rows_affected() == 1)
 }
 
-pub async fn is_address_exists(addr_pool: AddressesPool, address: String) -> Result<bool, sqlx::Error> {
+pub async fn is_address_exists(
+    addr_pool: AddressesPool,
+    address: String,
+) -> Result<bool, sqlx::Error> {
     let req = format!("SELECT 1 FROM {} WHERE address=?", ADDRESSES_NAME);
 
     let row = sqlx::query(req.as_str())
@@ -55,11 +65,13 @@ pub async fn is_address_exists(addr_pool: AddressesPool, address: String) -> Res
     Ok(row.is_some())
 }
 
-pub async fn insert_address_if_not_exist(addr_pool: AddressesPool, address: String) -> Result<bool, sqlx::Error> {
+pub async fn insert_address_if_not_exist(
+    addr_pool: AddressesPool,
+    address: String,
+) -> Result<bool, sqlx::Error> {
     if is_address_exists(addr_pool.pool(), address.clone()).await? {
         Ok(false)
-    }
-    else {
+    } else {
         let req = format!("INSERT INTO {}(address) VALUES(?)", ADDRESSES_NAME);
 
         let res = sqlx::query(req.as_str())
@@ -70,12 +82,13 @@ pub async fn insert_address_if_not_exist(addr_pool: AddressesPool, address: Stri
     }
 }
 
-pub async fn load_addresses(addr_pool: AddressesPool, balances: Arc<RwLock<HashMap<String, HashMap<u32, u64>>>>) -> Result<(), sqlx::Error> {
+pub async fn load_addresses(
+    addr_pool: AddressesPool,
+    balances: Arc<RwLock<HashMap<String, HashMap<u32, u64>>>>,
+) -> Result<(), sqlx::Error> {
     let req = format!("SELECT * FROM {}", ADDRESSES_NAME);
 
-    let rows = sqlx::query(req.as_str())
-        .fetch_all(&*addr_pool.0)
-        .await?;
+    let rows = sqlx::query(req.as_str()).fetch_all(&*addr_pool.0).await?;
 
     let mut rw_guard = balances.write().await;
     for row in rows {

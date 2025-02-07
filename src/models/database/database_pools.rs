@@ -1,13 +1,12 @@
-use std::sync::Arc;
 use sqlx::{Executor, SqlitePool};
+use std::sync::Arc;
 
-use crate::modules::database::addresses_pool::AddressesPool;
-use crate::modules::database::blocks_pool::BlocksPool;
-use crate::tools::db_tools::{create_paths_if_necessary, ADDRESSES_NAME, ADDRESSES_STRUCT, BLOCKS_HISTORY_NAME, BLOCKS_HISTORY_STRUCT};
-
-
-
-
+use crate::models::database::addresses_pool::AddressesPool;
+use crate::models::database::blocks_pool::BlocksPool;
+use crate::tools::db_tools::{
+    create_paths_if_necessary, ADDRESSES_NAME, ADDRESSES_STRUCT, BLOCKS_HISTORY_NAME,
+    BLOCKS_HISTORY_STRUCT,
+};
 
 pub struct DatabasePools {
     blocks_pool: BlocksPool,
@@ -24,18 +23,12 @@ impl DatabasePools {
         let addresses_conn = format!("sqlite:./{}.db", ADDRESSES_NAME);
         let addresses_pool = SqlitePool::connect(addresses_conn.as_str()).await?;
 
-        blocks_hist_pool.execute(BLOCKS_HISTORY_STRUCT)
-            .await?;
-        addresses_pool.execute(ADDRESSES_STRUCT)
-            .await?;
+        blocks_hist_pool.execute(BLOCKS_HISTORY_STRUCT).await?;
+        addresses_pool.execute(ADDRESSES_STRUCT).await?;
 
         Ok(Self {
-            blocks_pool: BlocksPool(
-                Arc::new(blocks_hist_pool)
-            ),
-            addresses_pool: AddressesPool(
-                Arc::new(addresses_pool)
-            ),
+            blocks_pool: BlocksPool(Arc::new(blocks_hist_pool)),
+            addresses_pool: AddressesPool(Arc::new(addresses_pool)),
         })
     }
 

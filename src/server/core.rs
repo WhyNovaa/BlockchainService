@@ -1,15 +1,20 @@
 use crate::exit;
+use axum::routing::get;
+use axum::{
+    extract::Path,
+    response::{IntoResponse, Json as AxumJson},
+    routing::post,
+    Extension, Router,
+};
+use serde_json::json;
 use std::collections::HashMap;
 use std::str::FromStr;
-use serde_json::json;
-use axum::{extract::Path, response::{IntoResponse, Json as AxumJson}, routing::post, Extension, Router};
-use axum::routing::get;
 use subxt::utils::AccountId32;
 use tokio::net::TcpListener;
 
-use crate::modules::balances::Balances;
-use crate::modules::client::URL;
-use crate::modules::database::addresses_pool::AddressesPool;
+use crate::models::balances::Balances;
+use crate::models::client::URL;
+use crate::models::database::addresses_pool::AddressesPool;
 use crate::tools::db_tools::insert_address_if_not_exist;
 
 pub struct Server {
@@ -19,21 +24,19 @@ pub struct Server {
 
 impl Server {
     pub fn new(addr_pool: AddressesPool, balances: Balances) -> Self {
-        Server { addr_pool, balances }
+        Server {
+            addr_pool,
+            balances,
+        }
     }
 
     pub fn start(self, url: URL) {
-
         tokio::spawn(async move {
             let app = Router::new()
                 .route("/api/balances/:address", post(add_address))
-                .layer(Extension(
-                    (self.addr_pool.pool(), self.balances.balances())
-                ))
+                .layer(Extension((self.addr_pool.pool(), self.balances.balances())))
                 .route("/api/balances/:address/:block_no", get(get_balance))
-                .layer(
-                    Extension(self.balances.balances())
-                );
+                .layer(Extension(self.balances.balances()));
 
             let listener = match TcpListener::bind(url.to_string()).await {
                 Ok(listener) => listener,
@@ -44,7 +47,7 @@ impl Server {
             };
 
             match axum::serve(listener, app).await {
-                Ok(()) => {},
+                Ok(()) => {}
                 Err(e) => {
                     eprintln!("Service start error: {e}");
                     exit(1);
@@ -54,16 +57,13 @@ impl Server {
     }
 }
 
-
 async fn add_address(
     Extension((pool, balances)): Extension<(AddressesPool, Balances)>,
     Path(address): Path<String>,
 ) -> impl IntoResponse {
     match AccountId32::from_str(address.as_str()) {
-        Ok(_) => {},
-        Err(_) => {
-            return AxumJson(json!({ "status": "400", "message": "Wrong address." }))
-        }
+        Ok(_) => {}
+        Err(_) => return AxumJson(json!({ "status": "400", "message": "Wrong address." })),
     }
     match insert_address_if_not_exist(pool, address.clone()).await {
         Ok(res) => {
@@ -72,7 +72,9 @@ async fn add_address(
                 rw_guard.insert(address, HashMap::new());
                 AxumJson(json!({ "status": "201", "message": "Address added." }))
             } else {
-                AxumJson(json!({ "status": "400", "message": "The address is already being tracked." }))
+                AxumJson(
+                    json!({ "status": "400", "message": "The address is already being tracked." }),
+                )
             }
         }
         Err(_) => AxumJson(json!({ "status": "500", "message": "Ooops, something went wrong." })),
@@ -83,7 +85,6 @@ async fn get_balance(
     Extension(balances): Extension<Balances>,
     Path((address, block_no)): Path<(String, u32)>,
 ) -> impl IntoResponse {
-
     let rw_guard = balances.0.read().await;
     let maybe_block_num_to_balance = rw_guard.get(&address).cloned();
     drop(rw_guard);
@@ -98,4 +99,3 @@ async fn get_balance(
         AxumJson(json!({ "status": "404", "message": "Address wasn't found." }))
     }
 }
-
