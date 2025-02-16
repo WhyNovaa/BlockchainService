@@ -1,14 +1,14 @@
 use std::str::FromStr;
 
-use subxt::blocks::Block;
-use subxt::utils::AccountId32;
-use subxt::{OnlineClient, PolkadotConfig};
-
 use crate::models::balances::Balances;
 use crate::models::client::Client;
 use crate::models::database::blocks_pool::BlocksPool;
 use crate::runtime;
 use crate::tools::db_tools::insert_hash;
+use subxt::blocks::Block;
+use subxt::utils::AccountId32;
+use subxt::{OnlineClient, PolkadotConfig};
+use tracing::{error, info, instrument};
 
 pub async fn handle_block(
     client: Client,
@@ -26,16 +26,17 @@ pub async fn handle_block(
     handle_accounts_in_hash(client, balances, block).await;
 }
 
+#[instrument]
 pub async fn handle_hash(blocks_pool: BlocksPool, block_number: &u32, hash: &str) {
     match insert_hash(blocks_pool, block_number, hash).await {
         Ok(res) => {
             if res {
-                println!("#{} hash:{} was added", block_number, hash)
+                info!("#{} hash:{} was added", block_number, hash);
             } else {
-                println!("{} wasn't added", hash)
+                info!("{} wasn't added", hash);
             }
         }
-        Err(e) => eprintln!("Error: {e}"),
+        Err(e) => error!("Error: {e}"),
     }
 }
 
@@ -54,7 +55,7 @@ pub async fn handle_accounts_in_hash(
         match AccountId32::from_str(tracking_address.as_str()) {
             Ok(id) => account_id = id,
             Err(_) => {
-                eprintln!("Incorrect account address: {}", tracking_address);
+                error!("Incorrect account address: {}", tracking_address);
                 continue;
             }
         }
@@ -72,12 +73,12 @@ pub async fn handle_accounts_in_hash(
                     let block_num_to_balance = rw_guard.get_mut(&tracking_address).unwrap();
                     block_num_to_balance.insert(block.header().number, account.data.free);
                 } else {
-                    println!("No data for {}", account_id);
+                    error!("No data for {}", account_id);
                     continue;
                 }
             }
             Err(e) => {
-                eprintln!("Fetching data from storage error: {}", e);
+                error!("Fetching data from storage error: {}", e);
                 continue;
             }
         }

@@ -14,6 +14,7 @@ impl URL {
     }
 }
 
+#[derive(Debug)]
 pub struct Client(Arc<OnlineClient<PolkadotConfig>>);
 
 impl Client {

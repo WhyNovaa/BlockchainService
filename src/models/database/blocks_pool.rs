@@ -1,7 +1,7 @@
 use sqlx::SqlitePool;
 use std::sync::Arc;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BlocksPool(pub(crate) Arc<SqlitePool>);
 
 impl BlocksPool {

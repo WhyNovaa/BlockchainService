@@ -1,12 +1,12 @@
-use sqlx::{Executor, SqlitePool};
-use std::sync::Arc;
-
 use crate::models::database::addresses_pool::AddressesPool;
 use crate::models::database::blocks_pool::BlocksPool;
 use crate::tools::db_tools::{
     create_paths_if_necessary, ADDRESSES_NAME, ADDRESSES_STRUCT, BLOCKS_HISTORY_NAME,
     BLOCKS_HISTORY_STRUCT,
 };
+use sqlx::{Executor, SqlitePool};
+use std::sync::Arc;
+use tracing::info;
 
 pub struct DatabasePools {
     blocks_pool: BlocksPool,
@@ -17,6 +17,7 @@ impl DatabasePools {
     pub async fn initialize() -> Result<Self, sqlx::Error> {
         create_paths_if_necessary().await;
 
+        info!("Connecting to databases");
         let blocks_hist_conn = format!("sqlite:./{}.db", BLOCKS_HISTORY_NAME);
         let blocks_hist_pool = SqlitePool::connect(blocks_hist_conn.as_str()).await?;
 

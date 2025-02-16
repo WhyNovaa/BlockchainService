@@ -1,4 +1,8 @@
 use crate::exit;
+use crate::models::balances::Balances;
+use crate::models::client::URL;
+use crate::models::database::addresses_pool::AddressesPool;
+use crate::tools::db_tools::insert_address_if_not_exist;
 use axum::routing::get;
 use axum::{
     extract::Path,
@@ -11,11 +15,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use subxt::utils::AccountId32;
 use tokio::net::TcpListener;
-
-use crate::models::balances::Balances;
-use crate::models::client::URL;
-use crate::models::database::addresses_pool::AddressesPool;
-use crate::tools::db_tools::insert_address_if_not_exist;
+use tracing::{error, info, instrument, span, Level};
 
 pub struct Server {
     addr_pool: AddressesPool,
@@ -31,25 +31,31 @@ impl Server {
     }
 
     pub fn start(self, url: URL) {
+        let span = span!(Level::INFO, "Server");
+
         tokio::spawn(async move {
+            let _ = span.enter();
+            info!("Starting router");
             let app = Router::new()
                 .route("/api/balances/:address", post(add_address))
                 .layer(Extension((self.addr_pool.pool(), self.balances.balances())))
                 .route("/api/balances/:address/:block_no", get(get_balance))
                 .layer(Extension(self.balances.balances()));
 
+            info!("Starting listener");
             let listener = match TcpListener::bind(url.to_string()).await {
                 Ok(listener) => listener,
                 Err(e) => {
-                    eprintln!("Listener initialization error: {e}");
+                    error!("Listener initialization error: {e}");
                     exit(1);
                 }
             };
 
+            info!("Serving listener and router");
             match axum::serve(listener, app).await {
                 Ok(()) => {}
                 Err(e) => {
-                    eprintln!("Service start error: {e}");
+                    error!("Service start error: {e}");
                     exit(1);
                 }
             };
@@ -57,6 +63,7 @@ impl Server {
     }
 }
 
+#[instrument]
 async fn add_address(
     Extension((pool, balances)): Extension<(AddressesPool, Balances)>,
     Path(address): Path<String>,
@@ -81,6 +88,7 @@ async fn add_address(
     }
 }
 
+#[instrument]
 async fn get_balance(
     Extension(balances): Extension<Balances>,
     Path((address, block_no)): Path<(String, u32)>,

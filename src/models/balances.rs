@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Balances(pub(crate) Arc<RwLock<HashMap<String, HashMap<u32, u64>>>>);
 
 impl Balances {

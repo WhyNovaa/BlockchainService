@@ -9,3 +9,5 @@ tokio = { version = "1", features = ["full"] }
 axum = "0.7.9"
 sqlx = { version = "0.8.2", features = ["sqlite", "runtime-tokio-native-tls"] }
 serde_json = "1.0"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
